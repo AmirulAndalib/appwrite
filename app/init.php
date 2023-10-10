@@ -233,7 +233,7 @@ App::setMode(App::getEnv('_APP_ENV', App::MODE_TYPE_PRODUCTION));
 Config::load('events', __DIR__ . '/config/events.php');
 Config::load('auth', __DIR__ . '/config/auth.php');
 Config::load('errors', __DIR__ . '/config/errors.php');
-Config::load('providers', __DIR__ . '/config/providers.php');
+Config::load('authProviders', __DIR__ . '/config/authProviders.php');
 Config::load('platforms', __DIR__ . '/config/platforms.php');
 Config::load('collections', __DIR__ . '/config/collections.php');
 Config::load('runtimes', __DIR__ . '/config/runtimes.php');
@@ -530,6 +530,40 @@ Database::addFilter(
     }
 );
 
+Database::addFilter(
+    'subQueryTargets',
+    function (mixed $value) {
+        return null;
+    },
+    function (mixed $value, Document $document, Database $database) {
+        return Authorization::skip(fn() => $database
+            ->find('targets', [
+                Query::equal('userInternalId', [$document->getInternalId()]),
+                Query::limit(APP_LIMIT_SUBQUERY),
+            ]));
+    }
+);
+
+Database::addFilter(
+    'subQueryTopicTargets',
+    function (mixed $value) {
+        return null;
+    },
+    function (mixed $value, Document $document, Database $database) {
+        $targetIds = Authorization::skip(fn () => \array_map(
+            fn ($document) => $document->getAttribute('targetId'),
+            $database
+            ->find('subscribers', [
+                Query::equal('topicInternalId', [$document->getInternalId()]),
+                Query::limit(APP_LIMIT_SUBQUERY),
+            ])
+        ));
+        if (\count($targetIds) > 0) {
+            return $database->find('targets', [Query::equal('$id', $targetIds)]);
+        }
+        return [];
+    }
+);
 /**
  * DB Formats
  */
